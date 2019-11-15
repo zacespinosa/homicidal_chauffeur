@@ -31,7 +31,7 @@ class Pursuer():
 	def update_state(self, s_p):
 		self.s = s_p
 
-	def f_p(self, pos, a): 
+	def f_p(self, pos, a):
 		"""
 		Continuous dynamics of the pursuer
 		"""
@@ -41,6 +41,14 @@ class Pursuer():
 		s_dot[2] = self.w/self.R_p*np.clip(a, self.a_min, self.a_max)
 
 		return s_dot
+
+	def optimal_strategy(self, pos_e, pos_p):
+		"""
+		Optimal strategy for the pursuer as obtained by Isaacs
+		"""
+		a_p = np.arctan2(pos_e[1] - pos_p[1], pos_e[0] - pos_p[0]) - pos_p[2]
+		return a_p
+
 
 #############################################
 #############################################
@@ -69,6 +77,20 @@ class Evader():
 
 		return s_dot
 
+	def optimal_strategy(self, pos_e, pos_p, R_p):
+		"""
+		Optimal strategy for the evader as obtained by Isaacs
+		"""
+		d = np.linalg.norm(pos_e - pos_p[0:2])
+
+		if d > R_p:
+			a_e = np.arctan2(pos_e[1] - pos_p[1], pos_e[0] - pos_p[0])
+		else:
+			a_e = pos_p[2] + np.pi/2
+
+		return a_e
+
+
 #############################################
 #############################################
 class Simulator():
@@ -83,14 +105,14 @@ class Simulator():
 		self.dt = dt
 		self.step_r = step_r # Reward at each time step
 		self.end_r = end_r # Reward at end game
-		self.x_max = x_max 
+		self.x_max = x_max
 		self.y_max = y_max
-		
+
 		self.curtime = 0
 		self.capture_radius = self.p.L/2
 
 		self.verbose = verbose
-		if verbose: 
+		if verbose:
 			self.path = [[],[],[],[]]
 		# Set initial state of puruser and evader
 		s_p, s_e = self.get_states(self.p.pos, self.e.pos)
@@ -114,7 +136,7 @@ class Simulator():
 		Reset player positions and plot game
 		This does not need to be called explicitly by user
 		"""
-		if self.verbose: 
+		if self.verbose:
 			fig, ax = plt.subplots()
 			ax.plot(self.path[0], self.path[1], 'r--', label="car")
 			ax.plot(self.path[2], self.path[3], 'b--', label="person")
@@ -133,32 +155,32 @@ class Simulator():
 
 	# 	param s_p: pursuer state
 	# 	param s_e: evader state
-	# 	""" 
-	# 	p_x, p_y = s_p[0], s_p[1]	
+	# 	"""
+	# 	p_x, p_y = s_p[0], s_p[1]
 	# 	e_x, e_y = s_e[0], s_e[1]
 
 	# 	if p_x < 0: p_x = 0
-	# 	if p_x > self.x_max: p_x = self.x_max 
+	# 	if p_x > self.x_max: p_x = self.x_max
 
-	# 	if e_x < 0: e_x = 0 
+	# 	if e_x < 0: e_x = 0
 	# 	if e_x > self.x_max: e_x = self.x_max
 
 	# 	if p_y < 0: p_y = 0
 	# 	if p_y > self.y_max: p_y = self.y_max
 
-	# 	if e_y < 0: e_y = 0 
+	# 	if e_y < 0: e_y = 0
 	# 	if e_y > self.y_max: e_y = self.y_max
 
 	# 	return (np.array([p_x, p_y, s_p[2]]), np.array([e_x, e_y]))
 
 	def get_reward(self, s_p, s_e):
 		"""
-		Returns reward for (s_p, s_e). 
-		
+		Returns reward for (s_p, s_e).
+
 		param s_p: pursuer state
 		param s_e: evader state
 		"""
-		if	s_e[1] <= self.capture_radius: 
+		if	s_e[1] <= self.capture_radius:
 			print("IN CAPTURE RADIUS")
 			self.restart_game() # Restart Game
 			return (-self.end_r, self.end_r)
@@ -168,20 +190,20 @@ class Simulator():
 		else:
 			return (-self.step_r, self.step_r)
 
-	def discrete_dynamics(self, a_p, a_e): 
+	def discrete_dynamics(self, a_p, a_e):
 		"""
 		Takes pursue and evader actions. Returns new position and orientation
-		of each agent. Pursuer: (x,y,phi) Evader:(x,y) 
+		of each agent. Pursuer: (x,y,phi) Evader:(x,y)
 		Discrete dynamics integrated by RK4
 
-		param a_p: pursuer action 
+		param a_p: pursuer action
 		param a_e: evader action
 		"""
 		dt = self.dt
 		pos_p = self.p.pos
 
 		k1 = dt*self.p.f_p(pos_p, a_p)
-		k2 = dt*self.p.f_p(pos_p+k1/2, a_p) 
+		k2 = dt*self.p.f_p(pos_p+k1/2, a_p)
 		k3 = dt*self.p.f_p(pos_p+k2/2, a_p)
 		k4 = dt*self.p.f_p(pos_p+k3, a_p)
 		pos_p_next = pos_p + (k1+2*k2+2*k3+k4)/6
@@ -197,8 +219,8 @@ class Simulator():
 
 	def get_states(self, pos_p, pos_e):
 		"""
-		Returns state of pursuer (psi, dpsi) and evader (psi, d) based on 
-		positions and orientations found in discrete dynamics. 
+		Returns state of pursuer (psi, dpsi) and evader (psi, d) based on
+		positions and orientations found in discrete dynamics.
 
 		param pos_p: position and orientation of puruser
 		param pos_e: position and orientation of evader
@@ -214,7 +236,7 @@ class Simulator():
 		Takes pursue and evader actions. Returns next state of game
 		Discrete dynamics integrated by RK4
 
-		pa			print(pos_p, pos_e)ram a_p: pursuer action 
+		pa			print(pos_p, pos_e)ram a_p: pursuer action
 		param a_e: evader action
 		"""
 		# Calculate next x and y for pursuer and evader
@@ -223,7 +245,7 @@ class Simulator():
 		# pos_p, pos_e = self.inbounds(pos_p, pos_e)
 		self.p.pos = pos_p
 		self.e.pos = pos_e
-		# Find and update pursuer and evader states 
+		# Find and update pursuer and evader states
 		s_p, s_e = self.get_states(pos_p, pos_e)
 		self.p.update_state(s_p)
 		self.e.update_state(s_e)
