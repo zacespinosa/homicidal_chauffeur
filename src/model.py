@@ -14,8 +14,6 @@ def test():
 	s_e = np.array([10, 10])
 
 	for i in range(int(600/.01)):
-		# a_e = random.random()*2*np.pi
-		# a_p = random.uniform(p.a_min, p.a_max)
 		a_e = e.optimal_strategy(e.pos, p.pos, p.R_p)
 		a_p = p.optimal_strategy(e.pos, p.pos)
 		p_info, e_info = s.simulate(a_p, a_e)

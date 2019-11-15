@@ -30,6 +30,7 @@ class Pursuer():
 
 	def update_state(self, s_p):
 		self.s = s_p
+		# print(s_p)
 
 	def f_p(self, pos, a):
 		"""
@@ -49,6 +50,12 @@ class Pursuer():
 		a_p = np.arctan2(pos_e[1] - pos_p[1], pos_e[0] - pos_p[0]) - pos_p[2]
 		return a_p
 
+	# def QLearning(self, sp, s, a):
+	# 	"""
+	# 	Simple Q-Learning
+	# 	"""
+	#
+	# 	self.Q[s, a] = self.Q[s, a] + self.alpha*(r + self.gamma*np.max(Q[sp,:]) - Q[s, a])
 
 #############################################
 #############################################
@@ -66,6 +73,7 @@ class Evader():
 
 	def update_state(self, s_e):
 		self.s = s_e
+		print(s_e)
 
 	def f_e(self, s, a):
 		"""
@@ -114,10 +122,30 @@ class Simulator():
 		self.verbose = verbose
 		if verbose:
 			self.path = [[],[],[],[]]
+
+		# Discrete state space
+		d_upper = 30
+		d_num_steps = 1000
+		phi_lower = -4
+		phi_upper = 4
+		phi_num_steps = 1000
+		phi_discrete_lower = -4
+		phi_discrete_upper = 4
+		phi_discrete_num_steps = 1000
+		self.d_discrete = np.linspace(0, d_upper, d_num_steps)
+		self.phi_discrete = np.linspace(phi_lower, phi_upper, phi_num_steps)
+		self.phi_dot_discrete = np.linspace(phi_discrete_lower, phi_discrete_upper, phi_discrete_num_steps)
+
+		# Discrete action space
+		a_steps = 100
+		self.a_e_discrete = np.linspace(-np.pi, np.pi, a_steps)
+		self.a_p_discrete = np.linspace(self.p.a_min, self.p.a_max, a_steps)
+
 		# Set initial state of puruser and evader
 		s_p, s_e = self.get_states(self.p.pos, self.e.pos)
 		self.p.update_state(s_p)
 		self.e.update_state(s_e)
+
 
 	def increment_game(self, pos_p, pos_e):
 		"""
@@ -217,21 +245,41 @@ class Simulator():
 
 		return (pos_p_next, pos_e_next)
 
-	def get_states(self, pos_p, pos_e):
+	def get_states(self, pos_p, pos_e, discrete_state=True):
 		"""
-		Returns state of pursuer (psi, dpsi) and evader (psi, d) based on
+		Returns state of pursuer (phi, dphi) and evader (phi, d) based on
 		positions and orientations found in discrete dynamics.
 
 		param pos_p: position and orientation of puruser
 		param pos_e: position and orientation of evader
 		"""
-		psi = np.arctan((pos_e[1] - pos_p[1])/(pos_e[0] - pos_p[0])) - pos_p[2]
-		dpsi = self.p.w/self.p.R_p*np.clip(pos_p[2], self.p.a_min, self.p.a_max)
+		phi = np.arctan((pos_e[1] - pos_p[1])/(pos_e[0] - pos_p[0])) - pos_p[2]
+		dphi = self.p.w/self.p.R_p*np.clip(pos_p[2], self.p.a_min, self.p.a_max)
 		d = np.linalg.norm(pos_p[:2] - pos_e)
 
-		return np.array([(psi, dpsi), (psi, d)])
+		if discrete_state:
+			phi_d = np.searchsorted(self.phi_discrete, phi)
+			phi_dot_d = np.searchsorted(self.phi_dot_discrete, dphi)
+			d_d = np.searchsorted(self.d_discrete, d)
 
-	def simulate(self, a_p, a_e):
+			return np.array([(phi_d, phi_dot_d), (phi_d, d_d)])
+		else:
+			return np.array([(phi, dphi), (phi, d)])
+
+	def from_discrete_action(self, a_p, a_e):
+		"""
+		Returns the continuous action based of the discrete action index
+		so the dynamics can be propogated forward.
+
+		param a_p: discrete action of the pursuer
+		param a_e: discrete action of the evader
+		"""
+		a_p_c = self.a_p_discrete[a_p]
+		a_e_c = self.a_p_discrete[a_e]
+
+		return (a_p_c, a_e_c)
+
+	def simulate(self, a_p, a_e, discrete_action=False):
 		"""
 		Takes pursue and evader actions. Returns next state of game
 		Discrete dynamics integrated by RK4
@@ -240,6 +288,9 @@ class Simulator():
 		param a_e: evader action
 		"""
 		# Calculate next x and y for pursuer and evader
+		if discrete_action:
+			a_p, a_e = self.from_discrete_action(a_p, a_e)
+
 		pos_p, pos_e = self.discrete_dynamics(a_p, a_e)
 		# Check that both agents are inbounds of the map
 		# pos_p, pos_e = self.inbounds(pos_p, pos_e)
