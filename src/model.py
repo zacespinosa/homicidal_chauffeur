@@ -8,7 +8,7 @@ def model():
 def test():
 	p = Pursuer()
 	e = Evader(np.array([10,10]))
-	s = Simulator(p, e)
+	s = Simulator(p, e, 10, 50, 20, 10)
 
 	s_p = np.zeros(3)
 	s_e = np.array([10, 10])

@@ -28,6 +28,11 @@ class Pursuer():
 		self.L = L
 		self.R_p = L/np.tan(a_max)
 
+
+		# ## Q-Learning
+		# num_states = d_steps*phi_steps*phi_dot_steps
+		# self.Q = np.random.random((num_states, a_steps))
+
 	def update_state(self, s_p):
 		self.s = s_p
 		# print(s_p)
@@ -60,7 +65,7 @@ class Pursuer():
 #############################################
 #############################################
 class Evader():
-	def __init__(self, pos_e=np.zeros(2), w_e=1.0):
+	def __init__(self, d_steps, phi_steps, phi_dot_steps, a_steps, pos_e=np.zeros(2), w_e=1.0):
 		"""
 		Create evader
 
@@ -71,9 +76,18 @@ class Evader():
 		self.pos = pos_e
 		self.pos_init = pos_e
 
+		## Q-Learning
+		self.num_states = d_steps*phi_steps*phi_dot_steps
+		self.num_actions = a_steps
+		# TODO: more intelligent initialization of Q
+		self.Q = np.random.random((self.num_states, self.num_actions))
+		self.gamma = 0.95
+		self.alpha = 0.1
+		self.eps = 0.0
+
 	def update_state(self, s_e):
 		self.s = s_e
-		print(s_e)
+		# print(s_e)
 
 	def f_e(self, s, a):
 		"""
@@ -98,11 +112,30 @@ class Evader():
 
 		return a_e
 
+	def updateQ(self, sp, s, a, r):
+		"""
+		Simple Q-Learning
+		"""
+		self.Q[s, a] = self.Q[s, a] + self.alpha*(r + self.gamma*np.max(self.Q[sp,:]) - self.Q[s, a])
+
+	def qLearningPolicy(self, s):
+		"""
+		ϵ-greedy exploration with Q learning based policy
+		"""
+
+		# don't explore
+		if np.random.random() > self.eps:
+			return np.argmax(self.Q[s,:])
+		# explore with random action -> probably don't need to explore
+		else:
+			return np.random.randint(0, self.num_actions)
+
+
 
 #############################################
 #############################################
 class Simulator():
-	def __init__(self, p, e, t=600, dt=0.01, step_r=1, end_r=10000, x_max=100, y_max=100, verbose=True):
+	def __init__(self, p, e, d_steps, phi_steps, phi_dot_steps, a_steps, t=60, dt=0.05, step_r=1, end_r=10000, x_max=100, y_max=100, verbose=True):
 		"""
 		param p: instantiated pursuer
 		param e: instantiated evader
@@ -125,19 +158,17 @@ class Simulator():
 
 		# Discrete state space
 		d_upper = 30
-		d_num_steps = 1000
 		phi_lower = -4
 		phi_upper = 4
-		phi_num_steps = 1000
-		phi_discrete_lower = -4
-		phi_discrete_upper = 4
-		phi_discrete_num_steps = 1000
-		self.d_discrete = np.linspace(0, d_upper, d_num_steps)
-		self.phi_discrete = np.linspace(phi_lower, phi_upper, phi_num_steps)
-		self.phi_dot_discrete = np.linspace(phi_discrete_lower, phi_discrete_upper, phi_discrete_num_steps)
+		phi_dot_lower = -4
+		phi_dot_upper = 4
+		self.d_discrete = np.linspace(0, d_upper, d_steps)
+		self.phi_discrete = np.linspace(phi_lower, phi_upper, phi_steps)
+		self.phi_dot_discrete = np.linspace(phi_dot_lower, phi_dot_upper, phi_dot_steps)
+
+		self.state_size_tuple = (d_steps, phi_steps, phi_dot_steps)
 
 		# Discrete action space
-		a_steps = 100
 		self.a_e_discrete = np.linspace(-np.pi, np.pi, a_steps)
 		self.a_p_discrete = np.linspace(self.p.a_min, self.p.a_max, a_steps)
 
@@ -201,14 +232,20 @@ class Simulator():
 
 	# 	return (np.array([p_x, p_y, s_p[2]]), np.array([e_x, e_y]))
 
-	def get_reward(self, s_p, s_e):
+	def get_reward(self, s_p, s_e, discrete_state=True):
 		"""
 		Returns reward for (s_p, s_e).
 
 		param s_p: pursuer state
 		param s_e: evader state
 		"""
-		if	s_e[1] <= self.capture_radius:
+		if discrete_state:
+			d_index = np.unravel_index(s_e, self.state_size_tuple)[0]
+			d = np.searchsorted(self.d_discrete, d_index)
+		else:
+			d = s_e[1]
+
+		if	d <= self.capture_radius:
 			print("IN CAPTURE RADIUS")
 			self.restart_game() # Restart Game
 			return (-self.end_r, self.end_r)
@@ -262,24 +299,35 @@ class Simulator():
 			phi_dot_d = np.searchsorted(self.phi_dot_discrete, dphi)
 			d_d = np.searchsorted(self.d_discrete, d)
 
-			return np.array([(phi_d, phi_dot_d), (phi_d, d_d)])
+			s_d = np.ravel_multi_index((d_d, phi_d, phi_dot_d), self.state_size_tuple)
+
+			return (s_d, s_d)
 		else:
 			return np.array([(phi, dphi), (phi, d)])
 
-	def from_discrete_action(self, a_p, a_e):
+	def from_discrete_p_action(self, a_p):
 		"""
 		Returns the continuous action based of the discrete action index
 		so the dynamics can be propogated forward.
 
 		param a_p: discrete action of the pursuer
-		param a_e: discrete action of the evader
 		"""
 		a_p_c = self.a_p_discrete[a_p]
-		a_e_c = self.a_p_discrete[a_e]
 
-		return (a_p_c, a_e_c)
+		return a_p_c
 
-	def simulate(self, a_p, a_e, discrete_action=False):
+	def from_discrete_e_action(self, a_e):
+		"""
+		Returns the continuous action based of the discrete action index
+		so the dynamics can be propogated forward.
+
+		param a_e: discrete action of the evader
+		"""
+		a_e_c = self.a_e_discrete[a_e]
+
+		return a_e_c
+
+	def simulate(self, a_p, a_e, discrete_p_action=False, discrete_e_action=False):
 		"""
 		Takes pursue and evader actions. Returns next state of game
 		Discrete dynamics integrated by RK4
@@ -288,8 +336,11 @@ class Simulator():
 		param a_e: evader action
 		"""
 		# Calculate next x and y for pursuer and evader
-		if discrete_action:
-			a_p, a_e = self.from_discrete_action(a_p, a_e)
+		if discrete_p_action:
+			a_p = self.from_discrete_p_action(a_p)
+
+		if discrete_e_action:
+			a_e = self.from_discrete_e_action(a_e)
 
 		pos_p, pos_e = self.discrete_dynamics(a_p, a_e)
 		# Check that both agents are inbounds of the map
@@ -303,6 +354,6 @@ class Simulator():
 		# Increment Game
 		self.increment_game(pos_p, pos_e)
 		# Find reward at current positions and time
-		r_p, r_e = self.get_reward(s_p, s_e)
+		r_p, r_e = self.get_reward(s_p, s_e, discrete_state=True)
 		# Return reward and new state
 		return np.array([(s_p, r_p),(s_e, r_e)])
