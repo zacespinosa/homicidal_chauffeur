@@ -35,7 +35,6 @@ class Pursuer():
 
 	def update_state(self, s_p):
 		self.s = s_p
-		# print(s_p)
 
 	def f_p(self, pos, a):
 		"""
@@ -65,7 +64,7 @@ class Pursuer():
 #############################################
 #############################################
 class Evader():
-	def __init__(self, d_steps, phi_steps, phi_dot_steps, a_steps, pos_e=np.zeros(2), w_e=1.0):
+	def __init__(self, d_steps, phi_steps, phi_dot_steps, a_steps, pos_e=np.zeros(2), w_e=1.0, load_q=False):
 		"""
 		Create evader
 
@@ -80,7 +79,10 @@ class Evader():
 		self.num_states = d_steps*phi_steps*phi_dot_steps
 		self.num_actions = a_steps
 		# TODO: more intelligent initialization of Q
-		self.Q = np.random.random((self.num_states, self.num_actions))
+		if load_q:
+			self.Q = np.loadtxt('Q_e.txt')
+		else:
+			self.Q = np.random.random((self.num_states, self.num_actions))
 		self.gamma = 0.95
 		self.alpha = 0.1
 		self.eps = 0.0
@@ -135,7 +137,7 @@ class Evader():
 #############################################
 #############################################
 class Simulator():
-	def __init__(self, p, e, d_steps, phi_steps, phi_dot_steps, a_steps, t=60, dt=0.05, step_r=1, end_r=10000, x_max=100, y_max=100, verbose=True):
+	def __init__(self, p, e, d_steps, phi_steps, phi_dot_steps, a_steps, t=60, dt=0.1, step_r=1, end_r=10000, x_max=100, y_max=100, verbose=True):
 		"""
 		param p: instantiated pursuer
 		param e: instantiated evader
@@ -157,9 +159,10 @@ class Simulator():
 			self.path = [[],[],[],[]]
 
 		self.restarts = 0
+		self.num_captures = 0
 
 		# Discrete state space
-		d_upper = 30
+		d_upper = 3 # small but it being larger doesn't really matter?
 		phi_lower = -4
 		phi_upper = 4
 		phi_dot_lower = -4
@@ -208,6 +211,7 @@ class Simulator():
 
 		self.p.pos = self.p.pos_init
 		self.e.pos = self.e.pos_init
+		self.curtime = 0
 
 	# def inbounds(self, s_p, s_e):
 	# 	"""
@@ -244,12 +248,14 @@ class Simulator():
 		"""
 		if discrete_state:
 			d_index = np.unravel_index(s_e, self.state_size_tuple)[0]
-			d = np.searchsorted(self.d_discrete, d_index)
+			d = self.d_discrete[d_index]
 		else:
 			d = s_e[1]
 
 		if	d <= self.capture_radius:
-			print("IN CAPTURE RADIUS")
+			if self.verbose:
+				print("IN CAPTURE RADIUS")
+			self.num_captures += 1
 			self.restart_game() # Restart Game
 			self.restarts += 1
 			return (-self.end_r, self.end_r)
@@ -300,11 +306,10 @@ class Simulator():
 		d = np.linalg.norm(pos_p[:2] - pos_e)
 
 		if discrete_state:
+			# clip to make sure indices stay inside array bounds
 			d_d = np.clip(np.searchsorted(self.d_discrete, d), 0, self.state_size_tuple[0]-1)
 			phi_d = np.clip(np.searchsorted(self.phi_discrete, phi), 0, self.state_size_tuple[1]-1)
 			phi_dot_d = np.clip(np.searchsorted(self.phi_dot_discrete, dphi), 0, self.state_size_tuple[2]-1)
-
-			print((d_d, phi_d, phi_dot_d))
 
 			s_d = np.ravel_multi_index((d_d, phi_d, phi_dot_d), self.state_size_tuple)
 

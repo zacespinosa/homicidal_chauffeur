@@ -2,7 +2,7 @@ import random as random
 import numpy as np
 from dynamics import Simulator, Pursuer, Evader
 
-def train_evader():
+def test_evader():
 	num_d_states = 25
 	num_phi_states = 20
 	num_phi_d_states = 20
@@ -13,10 +13,10 @@ def train_evader():
 
 	p = Pursuer()
 	e = Evader(num_d_states, num_phi_states, num_phi_d_states, num_actions, np.array([10,10]), load_q=True)
-	s = Simulator(p, e, num_d_states, num_phi_states, num_phi_d_states, num_actions, verbose=False)
+	s = Simulator(p, e, num_d_states, num_phi_states, num_phi_d_states, num_actions, verbose=True)
 
 
-	while s.restarts < num_epochs:
+	while s.restarts < 1:
 		# execute optimal pursuer strategy while training evader
 		a_p = p.optimal_strategy(e.pos, p.pos)
 		# a_e = e.optimal_strategy(e.pos, p.pos, p.R_p)
@@ -29,11 +29,8 @@ def train_evader():
 		new_state = e_info[0]
 		r_e = e_info[1]
 
-		e.updateQ(new_state, state, a_e, r_e)
+		# e.updateQ(new_state, state, a_e, r_e)
 
-	# save Q to text file
-	np.savetxt('Q_e.txt', e.Q)
+	# print("Evader captured: ", s.num_captures, "/", s.restarts, " times.")
 
-	print("Evader captured: ", s.num_captures, "/", s.restarts, " times.")
-
-train_evader()
+test_evader()
