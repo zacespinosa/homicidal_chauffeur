@@ -210,8 +210,10 @@ class Simulator():
 			plt.show()
 			self.path = [[],[],[],[]]
 
-		self.p.pos = self.p.pos_init
-		self.e.pos = self.e.pos_init
+		# self.p.pos = self.p.pos_init
+		# self.e.pos = self.e.pos_init
+		self.p.pos = np.random.random((3))
+		self.e.pos = np.random.random((2)) + np.random.random_integers(2, 15, size=(2))
 		self.curtime = 0
 
 	# def inbounds(self, s_p, s_e):
@@ -262,9 +264,9 @@ class Simulator():
 			self.restarts += 1
 			return (-self.end_r, self.end_r)
 		elif self.t == np.round(self.curtime,2):
+			self.last_capture_time = self.curtime
 			self.restart_game() # Restart Game
 			self.restarts += 1
-			self.last_capture_time = self.curtime
 			return (self.end_r, -self.end_r)
 		else:
 			return (-self.step_r, self.step_r)

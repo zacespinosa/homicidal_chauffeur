@@ -10,10 +10,10 @@ def train_evader():
 	num_actions = 10
 	num_states = num_d_states*num_phi_states*num_phi_d_states
 
-	num_epochs = 1000
+	num_epochs = 50
 	capture_times = np.zeros(num_epochs)
 
-	random_initialization = True
+	random_initialization = False
 
 	p = Pursuer()
 	e = Evader(num_d_states, num_phi_states, num_phi_d_states, num_actions, np.array([10,10]), load_q=random_initialization)
