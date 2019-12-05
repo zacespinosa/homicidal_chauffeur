@@ -160,6 +160,7 @@ class Simulator():
 
 		self.restarts = 0
 		self.num_captures = 0
+		self.last_capture_time = 0
 
 		# Discrete state space
 		d_upper = 3 # small but it being larger doesn't really matter?
@@ -256,12 +257,14 @@ class Simulator():
 			if self.verbose:
 				print("IN CAPTURE RADIUS")
 			self.num_captures += 1
+			self.last_capture_time = self.curtime
 			self.restart_game() # Restart Game
 			self.restarts += 1
 			return (-self.end_r, self.end_r)
 		elif self.t == np.round(self.curtime,2):
 			self.restart_game() # Restart Game
 			self.restarts += 1
+			self.last_capture_time = self.curtime
 			return (self.end_r, -self.end_r)
 		else:
 			return (-self.step_r, self.step_r)
