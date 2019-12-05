@@ -14,7 +14,7 @@ def train_evader():
 	s = Simulator(p, e, num_d_states, num_phi_states, num_phi_d_states, num_actions)
 
 
-	for i in range(10):
+	while s.restarts < 5:
 		# execute optimal pursuer strategy while training evader
 		a_p = p.optimal_strategy(e.pos, p.pos)
 

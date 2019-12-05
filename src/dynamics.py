@@ -156,6 +156,8 @@ class Simulator():
 		if verbose:
 			self.path = [[],[],[],[]]
 
+		self.restarts = 0
+
 		# Discrete state space
 		d_upper = 30
 		phi_lower = -4
@@ -163,6 +165,7 @@ class Simulator():
 		phi_dot_lower = -4
 		phi_dot_upper = 4
 		self.d_discrete = np.linspace(0, d_upper, d_steps)
+
 		self.phi_discrete = np.linspace(phi_lower, phi_upper, phi_steps)
 		self.phi_dot_discrete = np.linspace(phi_dot_lower, phi_dot_upper, phi_dot_steps)
 
@@ -248,9 +251,11 @@ class Simulator():
 		if	d <= self.capture_radius:
 			print("IN CAPTURE RADIUS")
 			self.restart_game() # Restart Game
+			self.restarts += 1
 			return (-self.end_r, self.end_r)
 		elif self.t == np.round(self.curtime,2):
 			self.restart_game() # Restart Game
+			self.restarts += 1
 			return (self.end_r, -self.end_r)
 		else:
 			return (-self.step_r, self.step_r)
@@ -295,11 +300,15 @@ class Simulator():
 		d = np.linalg.norm(pos_p[:2] - pos_e)
 
 		if discrete_state:
-			phi_d = np.searchsorted(self.phi_discrete, phi)
-			phi_dot_d = np.searchsorted(self.phi_dot_discrete, dphi)
-			d_d = np.searchsorted(self.d_discrete, d)
+			d_d = np.clip(np.searchsorted(self.d_discrete, d), 0, self.state_size_tuple[0]-1)
+			phi_d = np.clip(np.searchsorted(self.phi_discrete, phi), 0, self.state_size_tuple[1]-1)
+			phi_dot_d = np.clip(np.searchsorted(self.phi_dot_discrete, dphi), 0, self.state_size_tuple[2]-1)
+
+			print((d_d, phi_d, phi_dot_d))
 
 			s_d = np.ravel_multi_index((d_d, phi_d, phi_dot_d), self.state_size_tuple)
+
+			# print(s_d)
 
 			return (s_d, s_d)
 		else:
