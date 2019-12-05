@@ -1,3 +1,5 @@
+from tensorflow import keras
+from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 import numpy as np
 import random as random
@@ -27,6 +29,7 @@ class Pursuer():
 		self.a_max = a_max
 		self.L = L
 		self.R_p = L/np.tan(a_max)
+		self.end_game = False
 
 	def update_state(self, s_p):
 		self.s = s_p
@@ -60,7 +63,7 @@ class Pursuer():
 #############################################
 #############################################
 class Evader():
-	def __init__(self, pos_e=np.zeros(2), w_e=1.0):
+	def __init__(self, pos_e=np.zeros(2), w_e=1.0, learning=True):
 		"""
 		Create evader
 
@@ -70,10 +73,23 @@ class Evader():
 		self.w = w_e
 		self.pos = pos_e
 		self.pos_init = pos_e
+		self.end_game = False
+
+		# Discrete action space
+		a_steps = 100
+		self.a_space = np.linspace(-np.pi, np.pi, a_steps)
+
+		if learning:
+			self.memory = []
+			self.qnetwork = self.build_model()
+			# self.tnetwork = self.build_model()
+			self.batch_size = 32
+			self.epsilon = .15
+			self.discount = .7
 
 	def update_state(self, s_e):
 		self.s = s_e
-		print(s_e)
+		# print(s_e)
 
 	def f_e(self, s, a):
 		"""
@@ -98,7 +114,67 @@ class Evader():
 
 		return a_e
 
+	def learned_strategy(self, s_e):
+		# Shitty Exploration Heuristic
+		if random.random() < self.epsilon:
+			return random.choice(self.a_space)
 
+		# TODO: Normalize state values 
+		Q_s = self.qnetwork.predict(np.array([s_e]))
+
+		# Return a with max Q(s,a) 
+		a_idx = np.argmax(Q_s)
+		return self.a_space[a_idx]
+
+	def build_model(self):
+		"""
+		Define a very simple model for Q-Network and T-Network 
+		"""
+		model = keras.Sequential([
+			layers.Dense(64, activation='relu', input_shape=[2]), # Shape of State
+			layers.Dense(64, activation='relu'),
+			layers.Dense(100) # Number of actions (Q(s, a_i)) 
+		])
+
+		optimizer = keras.optimizers.RMSprop(0.001)
+		
+		model.compile(loss='mse', # mean_squared_error,
+					optimizer=optimizer,
+					metrics=['mae', 'mse'] # mean-absolute_error
+		)
+
+		# Print Model Details
+		model.summary()
+
+		return model
+
+	def update_learned_strategy(self, s_prev, s_next, a, r, i, terminal):
+		# Save Current Transition
+		self.memory.append((s_prev,s_next, a, r, terminal))
+		if i != 0 and i % self.batch_size == 0: # Batch size
+			print('Starting new batch', i)
+
+			minibatch = random.sample(self.memory, self.batch_size) 
+			predictions = np.zeros((self.batch_size, len(s_prev)))
+			targets = np.zeros((predictions.shape[0], len(self.a_space)))
+			
+			for j, example in enumerate(minibatch):
+				s_prev, s_next, a, r, terminal = example 
+
+				predictions[j:j+1] = s_prev
+
+				Q_s = self.qnetwork.predict(np.array([s_next]))
+				targets[j] = self.qnetwork.predict(np.array([s_prev]))
+
+				a_idx = np.argmax(Q_s)
+				if terminal: 
+					targets[j, a_idx] = r
+				else: 
+					targets[j, a_idx] = r + self.discount*np.max(Q_s)
+					
+				loss, mae, mse = self.qnetwork.train_on_batch(predictions, targets)
+				print(loss, mae)
+				
 #############################################
 #############################################
 class Simulator():
@@ -125,19 +201,19 @@ class Simulator():
 
 		# Discrete state space
 		d_upper = 30
-		d_num_steps = 1000
+		d_num_steps = 100
 		phi_lower = -4
 		phi_upper = 4
-		phi_num_steps = 1000
+		phi_num_steps = 100
 		phi_discrete_lower = -4
 		phi_discrete_upper = 4
-		phi_discrete_num_steps = 1000
+		phi_discrete_num_steps = 100
 		self.d_discrete = np.linspace(0, d_upper, d_num_steps)
 		self.phi_discrete = np.linspace(phi_lower, phi_upper, phi_num_steps)
 		self.phi_dot_discrete = np.linspace(phi_discrete_lower, phi_discrete_upper, phi_discrete_num_steps)
 
 		# Discrete action space
-		a_steps = 100
+		a_steps = 1000
 		self.a_e_discrete = np.linspace(-np.pi, np.pi, a_steps)
 		self.a_p_discrete = np.linspace(self.p.a_min, self.p.a_max, a_steps)
 
@@ -145,13 +221,16 @@ class Simulator():
 		s_p, s_e = self.get_states(self.p.pos, self.e.pos)
 		self.p.update_state(s_p)
 		self.e.update_state(s_e)
+		self.end_game = False
 
 
 	def increment_game(self, pos_p, pos_e):
 		"""
-		Increments the current time by one time step.
+		Increments the current time by one time step and
+		if verbose adds new positions to graph
 		"""
 		self.curtime += self.dt
+
 		if self.verbose:
 			curtime = int(self.curtime/self.dt)
 			self.path[0].append(pos_p[0])
@@ -174,6 +253,9 @@ class Simulator():
 
 		self.p.pos = self.p.pos_init
 		self.e.pos = self.e.pos_init
+		self.p.end_game = False
+		self.e.end_game = False
+		self.end_game = False
 
 	# def inbounds(self, s_p, s_e):
 	# 	"""
@@ -210,10 +292,19 @@ class Simulator():
 		"""
 		if	s_e[1] <= self.capture_radius:
 			print("IN CAPTURE RADIUS")
-			self.restart_game() # Restart Game
+
+			self.p.end_game = True
+			self.e.end_game = True
+			self.end_game = True
+
 			return (-self.end_r, self.end_r)
 		elif self.t == np.round(self.curtime,2):
-			self.restart_game() # Restart Game
+			print("OUT OF TIME")
+
+			self.p.end_game = True
+			self.e.end_game = True
+			self.end_game = True
+
 			return (self.end_r, -self.end_r)
 		else:
 			return (-self.step_r, self.step_r)
@@ -275,7 +366,7 @@ class Simulator():
 		param a_e: discrete action of the evader
 		"""
 		a_p_c = self.a_p_discrete[a_p]
-		a_e_c = self.a_p_discrete[a_e]
+		a_e_c = self.a_e_discrete[a_e]
 
 		return (a_p_c, a_e_c)
 
@@ -284,7 +375,7 @@ class Simulator():
 		Takes pursue and evader actions. Returns next state of game
 		Discrete dynamics integrated by RK4
 
-		pa			print(pos_p, pos_e)ram a_p: pursuer action
+		param a_p: pursuer action
 		param a_e: evader action
 		"""
 		# Calculate next x and y for pursuer and evader
