@@ -12,7 +12,7 @@ def test_evader():
 	num_epochs = 1000
 
 	p = Pursuer()
-	e = Evader(num_d_states, num_phi_states, num_phi_d_states, num_actions, np.array([10,10]), load_q=True)
+	e = Evader(num_d_states, num_phi_states, num_phi_d_states, num_actions, np.array([10,10]), learning='Q-learning', load_q=True)
 	s = Simulator(p, e, num_d_states, num_phi_states, num_phi_d_states, num_actions, verbose=True)
 
 
@@ -25,6 +25,7 @@ def test_evader():
 		state = e.s
 		a_e = e.qLearningPolicy(state)
 		p_info, e_info = s.simulate(a_p, a_e, discrete_p_action=False, discrete_e_action=True)
+		if s.end_game: s.restart_game()
 
 		new_state = e_info[0]
 		r_e = e_info[1]
