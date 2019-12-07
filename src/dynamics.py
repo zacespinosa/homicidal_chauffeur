@@ -31,11 +31,6 @@ class Pursuer():
 		self.R_p = L/np.tan(a_max)
 		self.end_game = False
 
-
-		# ## Q-Learning
-		# num_states = d_steps*phi_steps*phi_dot_steps
-		# self.Q = np.random.random((num_states, a_steps))
-
 	def update_state(self, s_p):
 		self.s = s_p
 
@@ -57,13 +52,6 @@ class Pursuer():
 		a_p = np.arctan2(pos_e[1] - pos_p[1], pos_e[0] - pos_p[0]) - pos_p[2]
 		return a_p
 
-	# def QLearning(self, sp, s, a):
-	# 	"""
-	# 	Simple Q-Learning
-	# 	"""
-	#
-	# 	self.Q[s, a] = self.Q[s, a] + self.alpha*(r + self.gamma*np.max(Q[sp,:]) - Q[s, a])
-
 #############################################
 #############################################
 class Evader():
@@ -84,14 +72,34 @@ class Evader():
 		self.num_states = d_steps*phi_steps*phi_dot_steps
 		self.num_actions = a_steps
 
+		self.memory = []
 		if self.learning == 'dqn':
-			self.memory = []
-			self.qnetwork = self.build_model()
-			self.tnetwork = self.build_model()
-			self.batch_size = 16
-			self.transfer_size = 256
-			self.epsilon = .15
-			self.discount = .7
+			if load_q: 
+				json_file = open('model_new.json', 'r')
+				loaded_model = json_file.read()
+				json_file.close()
+				self.qnetwork = keras.models.model_from_json(loaded_model)
+				self.qnetwork.load_weights('model_new.h5')
+				self.tnetwork = keras.models.model_from_json(loaded_model)
+				self.tnetwork.load_weights('model_new.h5')
+
+				optimizer = keras.optimizers.RMSprop(0.001)
+				
+				self.qnetwork.compile(loss='mse', 
+							optimizer=optimizer,
+							metrics=['mae', 'mse'] 
+				)
+				self.tnetwork.compile(loss='mse', 
+							optimizer=optimizer,
+							metrics=['mae', 'mse'] 
+				)
+			else: 
+				self.qnetwork = self.build_model()
+				self.tnetwork = self.build_model()
+			self.batch_size = 1
+			self.transfer_size = 400	
+			self.epsilon = .30
+			self.discount = .95
 
 		## Q-Learning
 		if self.learning == 'Q-learning':
@@ -145,24 +153,20 @@ class Evader():
 		# don't explore
 		if np.random.random() > self.eps:
 			return np.argmax(self.Q[s,:])
-		# explore with random action -> probably don't need to explore
 		else:
 			return np.random.randint(0, self.num_actions)
 
 	def random_strategy(self):
 		return np.random.randint(0, self.num_actions)
 
-	def dqn_strategy(self, s_e):
-		# Shitty Exploration Heuristic
-		if random.random() < self.epsilon:
+	def dqn_strategy(self, s_e, num_restarts):
+		# Exploration Heuristic
+		if random.random() < (1+num_restarts)**(-.20):
 			return np.random.randint(0, self.num_actions)
-			# return random.choice(self.a_space)
 
-		# TODO: Normalize state values 
 		s_e = np.array([[s_e[0]/np.pi, s_e[1]/3]])
 		Q_s = self.qnetwork.predict(s_e)
 
-		# Return a_idx with max Q(s,a) 
 		return np.argmax(Q_s)
 
 	def build_model(self):
@@ -212,6 +216,7 @@ class Evader():
 
 				a_idx = np.argmax(Q_s)
 				if terminal: 
+					print("In terminal state")
 					targets[j, a_idx] = r
 				else: 
 					targets[j, a_idx] = r + self.discount*np.max(Q_s)
@@ -222,6 +227,8 @@ class Evader():
 
 		# Set target network's weights
 		if len(self.memory) % self.transfer_size == 0:
+			print(len(self.memory))
+			print('set t network')
 			self.tnetwork.set_weights(self.qnetwork.get_weights())
 
 			return {'updated': True, 'loss': loss_avg / self.batch_size, 'mae': mae_avg / self.batch_size}
@@ -268,7 +275,7 @@ class Evader():
 #############################################
 #############################################
 class Simulator():
-	def __init__(self, p, e, d_steps, phi_steps, phi_dot_steps, a_steps, t=60, dt=0.1, step_r=1, end_r=10000, x_max=100, y_max=100, verbose=True):
+	def __init__(self, p, e, d_steps, phi_steps, phi_dot_steps, a_steps, t=60, dt=0.1, step_r=1, end_r=100000, x_max=100, y_max=100, verbose=True):
 		"""
 		param p: instantiated pursuer
 		param e: instantiated evader
@@ -345,42 +352,20 @@ class Simulator():
 			plt.show()
 			self.path = [[],[],[],[]]
 
-		self.p.pos = np.random.random((3))
-		self.e.pos = np.random.random((2)) + np.random.random_integers(2, 15, size=(2))
+		# self.p.pos = np.random.random((3))
+		# self.e.pos = np.random.random((2)) + np.random.random_integers(2, 15, size=(2))
+		self.p.pos = self.p.pos_init
+		self.e.pos = self.e.pos_init
 		self.p.end_game = False
 		self.e.end_game = False
 		self.end_game = False
-		self.e.memory = []
+		if len(self.e.memory) > 400: 
+			print('reseting memory')
+			self.e.memory = []
 
 		self.last_capture_time = self.curtime
 		self.restarts += 1
 		self.curtime = 0
-
-	# def inbounds(self, s_p, s_e):
-	# 	"""
-	# 	Prevents agents from going off map
-	# 	NOTE: I don't think we actually need this, but it's useful for now
-	# 	NOTE: Looping to other side of map may be prefered
-
-	# 	param s_p: pursuer state
-	# 	param s_e: evader state
-	# 	"""
-	# 	p_x, p_y = s_p[0], s_p[1]
-	# 	e_x, e_y = s_e[0], s_e[1]
-
-	# 	if p_x < 0: p_x = 0
-	# 	if p_x > self.x_max: p_x = self.x_max
-
-	# 	if e_x < 0: e_x = 0
-	# 	if e_x > self.x_max: e_x = self.x_max
-
-	# 	if p_y < 0: p_y = 0
-	# 	if p_y > self.y_max: p_y = self.y_max
-
-	# 	if e_y < 0: e_y = 0
-	# 	if e_y > self.y_max: e_y = self.y_max
-
-	# 	return (np.array([p_x, p_y, s_p[2]]), np.array([e_x, e_y]))
 
 	def get_reward(self, s_p, s_e, discrete_state=True):
 		"""
@@ -504,10 +489,9 @@ class Simulator():
 
 		if discrete_e_action:
 			a_e = self.from_discrete_e_action(a_e)
+			# print(a_e)
 
 		pos_p, pos_e = self.discrete_dynamics(a_p, a_e)
-		# Check that both agents are inbounds of the map
-		# pos_p, pos_e = self.inbounds(pos_p, pos_e)
 		self.p.pos = pos_p
 		self.e.pos = pos_e
 		# Find and update pursuer and evader states

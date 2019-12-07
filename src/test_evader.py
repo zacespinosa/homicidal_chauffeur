@@ -30,8 +30,6 @@ def test_evader():
 		new_state = e_info[0]
 		r_e = e_info[1]
 
-		# e.updateQ(new_state, state, a_e, r_e)
-
-	# print("Evader captured: ", s.num_captures, "/", s.restarts, " times.")
+	print("Evader captured: ", s.num_captures, "/", s.restarts, " times.")
 
 test_evader()

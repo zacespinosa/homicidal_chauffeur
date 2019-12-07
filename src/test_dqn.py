@@ -3,7 +3,7 @@ import numpy as np
 from dynamics import Simulator, Pursuer, Evader
 import matplotlib.pyplot as plt
 
-def train_evader():
+def test_dqn_evader():
     num_d_states = 25
     num_phi_states = 20
     num_phi_d_states = 20
@@ -15,10 +15,8 @@ def train_evader():
     loss = [] 
     mae = [] 
 
-    random_initialization = False
-
     p = Pursuer()
-    e = Evader(num_d_states, num_phi_states, num_phi_d_states, num_actions, np.array([10,10]), learning='dqn')
+    e = Evader(num_d_states, num_phi_states, num_phi_d_states, num_actions, np.array([10,10]), learning='dqn', load_q=True)
     s = Simulator(p, e, num_d_states, num_phi_states, num_phi_d_states, num_actions, verbose=False)
 
     while s.restarts < num_epochs:
@@ -27,13 +25,10 @@ def train_evader():
         # execute DQN policy for evader
         s_e = e.s
         a_e = e.dqn_strategy(s_e, s.restarts)
+        if a_e != 0: print(a_e)
         p_info, e_info = s.simulate(a_p, a_e, discrete_p_action=False, discrete_e_action=True)
 
         s_e_next, r_e = e_info
-        metrics = e.update_ddqn_strategy(s_e, s_e_next, a_e, r_e, e.end_game)
-        if metrics["updated"]: 
-            loss.append(metrics["loss"])
-            mae.append(metrics["mae"])
 
         if s.end_game: 
             print("Starting Game: ", s.restarts, "/", num_epochs)
@@ -41,16 +36,9 @@ def train_evader():
 
         capture_times[s.restarts-1] = s.last_capture_time
 
-    # save model
-    model_json = e.qnetwork.to_json()
-    with open("model.json", "w") as json_file:
-        json_file.write(model_json)
-    # serialize weights to HDF5
-    e.qnetwork.save_weights("model.h5")
-    print("Saved model to disk")
-
     print("Evader captured: ", s.num_captures, "/", s.restarts, " times.")
-    # Save network
+    avg_time = np.average(capture_times)
+    print("Average survival time of ", avg_time, "for", num_epochs, "games")
 
     # plot time till capture for every epoch
     plt.plot(np.arange(num_epochs), capture_times, 'k')
@@ -59,16 +47,4 @@ def train_evader():
     plt.xlabel('Game')
     plt.show()
 
-    plt.plot(np.arange(len(loss)), loss, 'k')
-    plt.title('Model Loss')
-    plt.ylabel('Loss')
-    plt.xlabel('Iteration')
-    plt.show()
-
-    plt.plot(np.arange(len(mae)), mae, 'k')
-    plt.title('Mean Absolute Error')
-    plt.ylabel('MAE')
-    plt.xlabel('Iteration')
-    plt.show()
-
-train_evader()
+test_dqn_evader()

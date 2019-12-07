@@ -7,7 +7,7 @@ def random_evader():
 	num_d_states = 25
 	num_phi_states = 20
 	num_phi_d_states = 20
-	num_actions = 10
+	num_actions = 100
 	num_states = num_d_states*num_phi_states*num_phi_d_states
 
 	num_epochs = 1000
@@ -17,7 +17,7 @@ def random_evader():
 
 	p = Pursuer()
 	e = Evader(num_d_states, num_phi_states, num_phi_d_states, num_actions, np.array([10,10]), learning='Q-learning', load_q=random_initialization)
-	s = Simulator(p, e, num_d_states, num_phi_states, num_phi_d_states, num_actions, verbose=False)
+	s = Simulator(p, e, num_d_states, num_phi_states, num_phi_d_states, num_actions, verbose=True)
 
 
 	while s.restarts < num_epochs:
